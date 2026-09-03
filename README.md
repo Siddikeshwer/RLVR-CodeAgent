@@ -1,53 +1,333 @@
-# bugfix-agent-env
+# RL-Envi-CodeFix
 
-> Replace the placeholders below, then remove this callout.
+A general-purpose reinforcement learning environment for training and evaluating LLM coding agents on code-fixing tasks.
 
-### Overview
-- **Environment ID**: `bugfix-agent-env`
-- **Short description**: <one-sentence description>
-- **Tags**: <comma-separated tags>
+The agent receives buggy code, inspects the task description and source files, uses tools to modify the code, and runs the tests inside an isolated Docker sandbox. The environment assigns a reward based on the test result.
 
-### Datasets
-- **Primary dataset(s)**: <name(s) and brief description>
-- **Source links**: <links>
-- **Split sizes**: <train/eval counts>
+Overview
 
-### Task
-- **Type**: <single-turn | multi-turn | tool use>
-- **Output format expectations (optional)**: <e.g., plain text, XML tags, JSON schema>
-- **Rubric overview**: <briefly list reward functions and key metrics>
+Environment ID: RL-Envi-CodeFix
 
-### Quickstart
-Run an evaluation with default settings:
+Type: Multi-turn tool-use coding environment
 
-```bash
-prime eval run bugfix-agent-env
-```
+Purpose: Evaluate LLM coding agents on autonomous bug fixing
 
-Configure model and sampling:
+Model API: OpenAI-compatible API (tested with OpenRouter)
 
-```bash
-prime eval run bugfix-agent-env   -m openai/gpt-4.1-mini   -n 20 -r 3 -t 1024 -T 0.7
-```
+Sandbox: Docker
 
-Notes:
-- Put task-owned settings under `[env.taskset]` and harness-owned settings under `[env.harness]` in TOML configs.
+Test runner: Pytest
 
-### Taskset Config
-Document any taskset config fields and their meaning. Example:
+Reward: 1.0 when all tests pass, otherwise 0.0
 
-| Field | Type | Default | Description |
-| --- | ---- | ------- | ----------- |
-| `max_examples` | int | `-1` | Limit on dataset size (use -1 for all) |
+How It Works
 
-### Harness Config
-Document any harness config fields and their meaning.
+task/README.md + main.py + tests
+              ↓
+          LLM Agent
+              ↓
+     read_file / write_file
+              ↓
+          run_tests
+              ↓
+        Docker Sandbox
+              ↓
+            Pytest
+              ↓
+       Pass → Reward 1.0
+       Fail → Reward 0.0
 
-### Metrics
-Summarize key metrics your rubric emits and how they�re interpreted.
+The agent must inspect the code, identify the bug, modify the source, and verify its solution through execution.
 
-| Metric | Meaning |
-| ------ | ------- |
-| `reward` | Main scalar reward (weighted sum of criteria) |
-| `accuracy` | Exact match on target answer |
+Task Format
 
+Each task lives in task/:
+
+task/
+├── main.py
+├── test_main.py
+└── README.md
+
+main.py
+
+Contains the intentionally buggy implementation.
+
+README.md
+
+Describes the expected behavior and requirements of the task.
+
+Example:
+
+# Code Fix Task
+
+Fix the bug in `main.py`.
+
+The function should return the correct result for
+the specified inputs.
+
+All tests must pass.
+
+The task can be any programming problem; it is not limited to a particular algorithm.
+
+test_main.py
+
+Contains the objective tests used to determine whether the agent successfully fixed the code.
+
+The agent may read the tests, but should modify the source code rather than the tests.
+
+Agent Tools
+
+read_file
+
+Reads a file from the workspace.
+
+write_file
+
+Modifies or creates a file in the workspace.
+
+run_tests
+
+Runs:
+
+python -m pytest task
+
+inside Docker.
+
+Docker Sandbox
+
+Code execution happens inside a Docker container.
+
+The sandbox:
+
+Uses the bugfix-sandbox image
+
+Mounts the project as /workspace
+
+Runs tests from /workspace
+
+Streams test output
+
+Captures the exit code
+
+Removes the container after execution
+
+Example:
+
+[Docker] Starting container...
+[Docker] Command: python -m pytest task
+
+============================== 3 passed ==============================
+
+[Docker] Container finished with exit code 0
+[Docker] Container removed.
+
+Reward
+
+The verifier uses the Docker test process exit code:
+
+return 1.0 if "[exit_code=0]" in result else 0.0
+
+Therefore:
+
+exit_code=0 → all tests passed → reward = 1.0
+
+non-zero exit code → tests failed → reward = 0.0
+
+The reward is independent of the number of tests.
+
+Requirements
+
+Python 3.11+
+
+uv
+
+Docker Desktop
+
+An OpenAI-compatible API key
+
+Pytest
+
+Installation
+
+git clone https://github.com/YOUR_USERNAME/RL-Envi-CodeFix.git
+cd RL-Envi-CodeFix
+uv sync
+
+Make sure Docker Desktop is running.
+
+Environment Variables
+
+Create .env:
+
+OPENROUTER_API_KEY=your_api_key_here
+
+Never commit .env to GitHub.
+
+Use .env.example as a safe template:
+
+OPENROUTER_API_KEY=
+
+Run
+
+uv run python run_agent.py
+
+The agent will:
+
+Read the task description.
+
+Inspect the source code.
+
+Identify the bug.
+
+Modify the source code.
+
+Run tests inside Docker.
+
+Continue fixing if necessary.
+
+Receive a reward based on the final result.
+
+Example
+
+A task might contain a buggy largest(arr) implementation, with README.md describing that it must return the largest value.
+
+The agent inspects the code, identifies the bug, edits main.py, and runs the tests.
+
+If all tests pass:
+
+reward = 1.0
+
+Metrics
+
+Metric
+
+Meaning
+
+score_result
+
+Final verifier reward
+
+num_turns
+
+Number of agent turns
+
+total_tool_calls
+
+Total tool calls
+
+read_file_calls
+
+Number of file reads
+
+write_file_calls
+
+Number of file modifications
+
+run_tests_calls
+
+Number of test executions
+
+avg_reward
+
+Average reward across rollouts
+
+Project Structure
+
+RL-Envi-CodeFix/
+│
+├── task/
+│   ├── main.py
+│   ├── test_main.py
+│   └── README.md
+│
+├── docker_tool.py
+├── environment.py
+├── run_agent.py
+├── pyproject.toml
+├── .env.example
+├── .gitignore
+└── README.md
+
+Why This Is an RL Environment
+
+The environment provides an objective reward for the agent's actions.
+
+The agent follows a loop:
+
+Observe → Reason → Act → Execute → Observe → Act ...
+
+The final test result determines the reward.
+
+This makes the project useful for experimenting with:
+
+LLM agents
+
+Tool use
+
+Code repair
+
+Agent trajectories
+
+Reward design
+
+Reinforcement learning
+
+Coding-model evaluation
+
+Creating New Tasks
+
+For a new coding problem, replace:
+
+task/main.py
+task/test_main.py
+task/README.md
+
+The environment itself does not need to change.
+
+Tasks can cover:
+
+Algorithms
+
+Data structures
+
+String manipulation
+
+Mathematical functions
+
+File processing
+
+APIs
+
+Utilities
+
+Business logic
+
+Security
+
+Docker provides isolation for code execution, but arbitrary untrusted code should still be treated carefully.
+
+For stronger isolation, use resource limits, restricted networking, non-privileged containers, and appropriate Docker security settings.
+
+Do not expose secrets or sensitive host files to the container.
+
+Roadmap
+
+More diverse coding tasks
+
+Multiple programming-language support
+
+Reward shaping
+
+Multiple test suites per task
+
+Automatic task generation
+
+Stronger sandbox restrictions
+
+Benchmarking multiple LLMs
+
+RL training integration
+
+License
+
+MIT License.
