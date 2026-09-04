@@ -6,7 +6,7 @@ The agent receives buggy code, inspects the task description and source files, u
 
 ## Overview
 
-- **Environment ID:** `RL-Envi-CodeFix`
+- **Environment ID:** `RLVR-CodeAgent`
 - **Type:** Multi-turn tool-use coding environment
 - **Purpose:** Evaluate LLM coding agents on autonomous bug fixing
 - **Model API:** OpenAI-compatible API (tested with OpenRouter)
